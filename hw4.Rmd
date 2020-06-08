@@ -1,0 +1,375 @@
+---
+title: "hw4"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+Question 9.1
+
+Using the same crime data set uscrime.txt as in Question 8.2, apply Principal Component Analysis
+and then create a regression model using the first few principal components. Specify your new model in
+terms of the original variables (not the principal components), and compare its quality to that of your
+solution to Question 8.2. You can use the R function prcomp for PCA. 
+
+(Note that to first scale the data, you can include scale. = TRUE to scale as part of the PCA function. Don¡¦t forget that, to make a
+prediction for the new city, you¡¦ll need to unscale the coefficients (i.e., do the scaling calculation in
+reverse)!)
+
+
+load data, check corrlation before we run PCA
+
+```{r}
+library(corrplot)
+library(ggfortify)
+data <- read.table("uscrime.txt",header= TRUE)
+corr <- cor(data)
+corr
+corrplot(corr)
+```
+
+
+Significant correlation noticed.Then we will use PCA to find important data
+Return valve: (centred (and scaled if requested) data multiplied by the rotation matrix).
+
+Plot to figure out how many PAs should be included, in the plot we can concluded that first 5 PCs should be included as they have large variances.
+
+```{r}
+pca <- prcomp(data[,1:15], scale. = TRUE)
+screeplot(pca, type="lines",col="RED")
+```
+
+choose the first 5 principle attributes and run linear regression model 
+
+```{r}
+PCs <- pca$x[,1:5]
+```
+
+
+Build linear regression model with the first 5 attributes
+First combine PCs with Crime data, then convert to a dataframe
+```{r}
+
+pcadata <- cbind(PCs, data[,16])
+pcaframe <- as.data.frame(pcadata) 
+modelpca <- lm(V6~., data =pcaframe) 
+summary(modelpca)
+```
+
+```{r}
+test<- data.frame(M = 14.0,
+So = 0,
+Ed = 10.0,
+Po1 = 12.0,
+Po2 = 15.5,
+LF = 0.640,
+M.F = 94.0,
+Pop = 150,
+NW = 1.1,
+U1 = 0.120,
+U2 = 3.6,
+Wealth = 3200,
+Ineq = 20.1,
+Prob = 0.04,
+Time = 39.0)
+```
+
+Convert PCA coef to b0,b1...
+```{r}
+pcacoef <-modelpca$coefficients
+pcacoef
+b0 <- pcacoef[1]
+b <- pcacoef[2:6]
+cat("new coefs are", b0,b)
+
+```
+
+Transform the PC coefficients into coefficients for the original variables
+
+A is m¡Ñn matrix¡AB is n¡Ñk matrix¡AAB =  %*% matrix
+```{r}
+pca$rotation[,1:5]
+b
+
+
+a <- pca$rotation[,1:5] %*% b
+a
+```
+
+covert the data to un-scaled data:
+
+When scaling, this function subtracts the mean and divides by the standard deviation, for each variable.
+So, alpha * (x - mean)/sd = originalAlpha * x.
+That means:
+(1) originalAlpha = alpha/sd
+(2) we have to modify the constant term a0 by alpha*mean/sd
+```{r}
+
+
+originala <- a/sapply(data[,1:15],sd)
+originalb0 <- b0 - sum(a*sapply(data[,1:15],mean)/sapply(data[,1:15],sd))
+originala 
+originalb0 
+```
+
+
+Use the test dataset to test the PCA regression model
+We will compare both R2 value  between the PCA model and regression model from last hw
+```{r}
+
+
+#model from last hw
+model2<- model <- lm(Crime~M+So+Ed+Po1+U2+Ineq+Prob , data)
+summary(model2)
+predictcrime2 <- predict(model2, test)
+predictcrime2
+# R2 is 0.7685 and adjusted R2 is 0.7269
+
+```
+Calculate R2 of PCA model
+```{r}
+estimates <- as.matrix(data[,1:15]) %*% originala + originalb0
+
+SSE = sum((estimates - data[,16])^2)
+SStot = sum((data[,16] - mean(data[,16]))^2)
+1 - SSE/SStot
+R2 <- 1 - SSE/SStot
+R2 - (1 - R2)*4/(nrow(data)-4-1)
+```
+
+Conclusion: The R squarefrom regular regression model is bigger than PCA model with 5 PCs. Regular regression model may works better than PCA model. 
+
+
+
+
+
+Q10.1
+Using the same crime data set uscrime.txt as in Questions 8.2 and 9.1, find the best model you can
+using
+(a) a regression tree model, and
+(b) a random forest model.
+
+In R, you can use the tree package or the rpart package, and the randomForest package. For
+each model, describe one or two qualitative takeaways you get from analyzing the results (i.e., don¡¦t just
+stop when you have a good model, but interpret it too).
+---
+```{r}
+library(rpart)
+library(randomForest)
+rm(list=ls())
+
+```
+
+
+
+
+Will test the R square and predict Crime value to evaluate the model preformance 
+
+Regression Tree 
+```{r}
+
+data<- read.table("uscrime.txt", header = TRUE)
+regreesiontree<- rpart(Crime~., data = data)
+summary(regreesiontree)
+
+```
+
+Plot the tree
+```{r}
+plot(regreesiontree)
+text(regreesiontree)
+```
+
+
+Calculate R2 
+Plot of actual vs. predicted crime values
+```{r}
+RTpredictCrime<- predict(regreesiontree)
+RTpredictCrime 
+data[,16]
+# The predict values are close to real Crime data
+# Calculate the r2
+RTSSE <- sum((RTpredictCrime-data$Crime)^2)
+RTSSOT <- sum((data$Crime - mean(data$Crime))^2)
+RTR2 <- 1 - RTSSE/RTSSOT
+RTR2
+
+
+plot(data$Crime, RTpredictCrime)
+abline(0,1)
+
+plot(data$Crime, scale(RTpredictCrime - data$Crime))
+abline(0,0)
+```
+
+
+Now we get the original regression tree's R2 is 0.5628.
+
+
+
+
+Random forest model
+First random choose a small number of factors 
+Set 4 as the number of factor
+```{r}
+num <- 4
+RFmodel<-randomForest(formula = Crime ~ ., data = data, mtry = num, importance = TRUE) 
+RFmodel
+
+```
+
+
+
+Plot of actual vs. predicted crime values
+calculate R2
+```{r}
+
+RFpredcrime<-predict(RFmodel)
+RFpredcrime
+data$Crime
+#calculate R2 for RF model
+RFres <- sum((RFpredcrime-data$Crime)^2)
+RFtot <- sum((data$Crime - mean(data$Crime))^2)
+RFR2 <- 1 - RFres/RFtot
+RFR2
+
+
+plot(data$Crime, RFpredcrime)
+abline(0,1)
+
+plot(data$Crime, scale(RFpredcrime - data$Crime))
+abline(0,0)
+```
+The R square for the regression tree is 0.5628, the R square for the random forest is 0.4219. The regression tree is better for this dataset as the data size is very limited (with only 47 observations) for a random tree to generate enough trees. 
+
+
+
+Question 10.2
+Describe a situation or problem from your job, everyday life, current events, etc., for which a logistic
+regression model would be appropriate. List some (up to 5) predictors that you might use.
+
+Logistic regression is best used for categories, it returns the probabilities of an event. This can be used to predict the probability that a user will purchase a product. Prediction attributes:
+1) Time of searching for the product 
+2) Location of the viewer 
+3) Search times
+4) Past purchase history within the month 
+5) The product sold number with the month 
+
+
+
+Question 10.3
+1. Using the GermanCredit data set germancredit.txt use logistic
+regression to find a good predictive model for whether credit applicants are good credit risks or
+not. 
+
+Show your model (factors used and their coefficients), the software output, and the quality
+of fit. You can use the glm function in R. To get a logistic regression (logit) model on data where
+the response is either zero or one, use family=binomial(link=¡¨logit¡¨) in your glm
+function call.
+
+```{R}
+rm(list=ls())
+data<-read.table("german.txt")
+```
+
+First start with split training dataset and testing dataset. Choose 70% for training 
+Conver V21 to 0<=y<=1 binary before call glm function 
+```{r}
+set.seed(1)
+
+data$V21[data$V21==1]<-0
+data$V21[data$V21==2]<-1
+
+num <- nrow(data)
+trainDSnum <- sample(1:num, size = round(num * 0.7), replace = FALSE)
+trainDS <- data[trainDSnum,]
+testDS <- data[-trainDSnum,]
+```
+
+Call glm to preform regression model 
+
+```{r}
+LRmodel <- glm(V21 ~.,family=binomial(link = "logit"),data=trainDS)
+summary(LRmodel)
+```
+Select significant parameters p< 0.05 and retrain the model
+```{r}
+LRmodel2 = glm(V21 ~ V1+V2+V3+V4+V5+V6+V7+V8+V9+V10+V12+V14+V16+V20,family=binomial(link = "logit"),data=trainDS)
+LRmodel2
+```
+
+After optimize the model, we will use the test dataset to evaluate the preformance of the model 
+```{r}
+
+test<-predict(LRmodel2,testDS,type = "response")
+test
+```
+Set threshold to 0.5 and convert the predict results to O or 1
+```{r}
+library(pROC)
+test_round <- as.integer(test > 0.5)
+#test_round
+#cat("Raw data results:")
+#testDS$V21
+
+#Calculate the accuracy 
+t <- table(test_round,testDS$V21)
+acc <- (t[1,1] + t[2,2]) / sum(t)
+acc
+
+#Calculate ROC
+roc<-roc(testDS$V21,test_round)
+plot(roc,main="ROC curve")
+roc
+```
+Results:
+After optimizing the model, the AIC is 678.69. The accuracy of the model is 0.74 and ROC is 0.6544.
+The Coefficients can be found in the following output section. 
+The model can be further optimized using the same fashion (reduce un-important attributes and re-train the model).
+
+```{r}
+summary(LRmodel2)
+cat("The accurancy of the model is ", acc)
+
+```
+
+
+
+2. Because the model gives a result between 0 and 1, it requires setting a threshold probability to
+separate between ¡§good¡¨ and ¡§bad¡¨ answers. In this data set, they estimate that incorrectly
+identifying a bad customer as good, is 5 times worse than incorrectly classifying a good
+customer as bad. Determine a good threshold probability based on your model.
+
+To minimize the cost, first, we need to determine the threshold that can best 
+```{r}
+
+
+loss <- c()
+for(i in 1:100)
+{
+  threshold <- i/100
+  test_round2 <- as.integer(test > threshold) 
+
+  tm <-as.matrix(table(test_round2,testDS$V21))
+
+  if(nrow(tm)>1) { c1 <- tm[2,1] } else { c1 <- 0 }
+  if(ncol(tm)>1) { c2 <- tm[1,2] } else { c2 <- 0 }
+  loss <- c(loss, c2*5 + c1)
+}
+
+plot(loss)
+#From the plot we can see when i=11, we got the smallest total loss 
+loss[11]
+
+```
+
+Conclusion: When thershold is 0.11, we got the smallest total lose which is 173
+
+
